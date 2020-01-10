@@ -3,14 +3,16 @@ import logging
 import re
 import os
 
-@click.command()
-@click.argument('book')
+class NoHeadlinesException(Exception):
+    pass
+#@click.command()
+#@click.argument('book')
 @click.option('--nochapters', is_flag=True, default=False, help="Don't actually split the book into chapters. Just extract the inner text.")
 @click.option('--stats', is_flag=True, default=False, help="Don't actually split the book into chapters. Just return statistics about the chapters.")
 @click.option('--verbose', is_flag=True, help='Get extra information about what\'s happening behind the scenes.')
 @click.option('--debug', is_flag=True, help='Turn on debugging messages.')
 @click.version_option('0.1')
-def cli(book, nochapters, stats, verbose, debug):
+def cli(book, nochapters=False, stats = False, verbose = True, debug = True, out_dir = 'out' ):
     """ This tool breaks up a plain text book into chapters.
     It works especially well with Project Gutenberg plain text ebooks.
     This may also be used to strip metatextual text (tables of contents,
@@ -26,10 +28,11 @@ def cli(book, nochapters, stats, verbose, debug):
 
     logging.info('Now attempting to break the file %s into chapters.' % book)
 
-    bookObj = Book(book, nochapters, stats)
+    bookObj = Book(book, nochapters, stats, out_dir)
 
 class Book():
-    def __init__(self, filename, nochapters, stats):
+    def __init__(self, filename, nochapters, stats, out_dir):
+        self.out_dir = out_dir
         self.filename = filename
         self.nochapters = nochapters
         self.contents = self.getContents()
@@ -121,9 +124,9 @@ class Book():
                 headings.append(i)
 
         if len(headings) < 3:
-            logging.info('Headings: %s' % headings)
-            logging.error("Detected fewer than three chapters. This probably means there's something wrong with chapter detection for this book.")
-            exit()
+            raise NoHeadlinesException('Detected fewer than three chapters')
+
+
 
         self.endLocation = self.getEndLocation()
 
@@ -137,6 +140,7 @@ class Book():
         Filters headings out that are too close together,
         since they probably belong to a table of contents.
         """
+
         pairs = zip(self.headingLocations, self.headingLocations[1:])
         toBeDeleted = []
         for pair in pairs:
@@ -228,6 +232,7 @@ class Book():
         basename = os.path.basename(self.filename)
         noExt = os.path.splitext(basename)[0]
 
+
         if self.nochapters:
             # Join together all the chapters and lines.
             text = ""
@@ -243,11 +248,14 @@ class Book():
         else:
             logging.info('Filename: %s' % noExt)
             outDir = noExt + '-chapters'
-            if not os.path.exists(outDir):
-                os.makedirs(outDir)
+
+            if not os.path.exists(self.out_dir):
+                os.makedirs(self.out_dir)
+            if not os.path.exists(self.out_dir+'/'+outDir):
+                os.makedirs(self.out_dir+'/'+outDir)
             ext = '.txt'
             for num, chapter in zip(chapterNums, self.chapters):
-                path = outDir + '/' + num + ext
+                path = self.out_dir + '/'+outDir + '/' + num + ext
                 logging.debug(chapter)
                 chapter = '\n'.join(chapter)
                 with open(path, 'w') as f:
